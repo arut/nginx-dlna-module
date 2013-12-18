@@ -29,6 +29,8 @@ typedef enum {
 typedef struct {
     ngx_http_core_srv_conf_t    *cscf;
     ngx_str_t                    location;
+    in_port_t                    port;
+    uint32_t                     addr;
 } ngx_http_dlna_root_t;
 
 
@@ -39,6 +41,7 @@ typedef struct {
 
 typedef struct {
     ngx_str_t                    name;
+    ngx_http_dlna_root_t        *root;
 } ngx_http_dlna_loc_conf_t;
 
 
@@ -175,7 +178,18 @@ ngx_http_dlna_handler(ngx_http_request_t *r)
         h->hash = 1;
 
         ngx_str_set(&h->key, "contentFeatures.dlna.org");
-        ngx_str_set(&h->value, "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000");
+        ngx_str_set(&h->value, "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS="
+                               "01700000000000000000000000000000");
+
+        h = ngx_list_push(&r->headers_out.headers);
+        if (h == NULL) {
+            return NGX_ERROR;
+        }
+
+        h->hash = 1;
+
+        ngx_str_set(&h->key, "transferMode.dlna.org");
+        ngx_str_set(&h->value, "Streaming");
 
         return NGX_DECLINED;
     }
@@ -488,7 +502,7 @@ ngx_http_dlna_xor_node(ngx_http_request_t *r, u_char *name)
     "              object.item.videoItem\n"                                   \
     "            &lt;/upnp:class&gt;\n"                                       \
     "            &lt;dc:date&gt;\n"                                           \
-    "              2011-09-04T14:15:01\n"                                     \
+    "              %d-%02d-%02dT%02d:%02d:%02d\n"                             \
     "            &lt;/dc:date&gt;\n"                                          \
     "            &lt;sec:dcmInfo&gt;\n"                                       \
     "                CREATIONDATE=0,"                                         \
@@ -496,12 +510,12 @@ ngx_http_dlna_xor_node(ngx_http_request_t *r, u_char *name)
                     "BM=0\n"                                                  \
     "            &lt;/sec:dcmInfo&gt;\n"                                      \
     "            &lt;res\n"                                                   \
-    "                size=\"314811902\"\n"                                    \
+    "                size=\"%O\"\n"                                           \
     "                duration=\"0:06:41.832\"\n"                              \
     "                bitrate=\"783441\"\n"                                    \
     "                resolution=\"1280x720\"\n"                               \
     "                protocolInfo=\"http-get:*:video/x-mkv:*\"&gt;"           \
-                  "http://192.168.1.35:8081%V%V/%s\n"                         \
+                  "http://%ui.%ui.%ui.%ui:%ui%V%V/%s\n"                       \
                 "&lt;/res&gt;\n"                                              \
     "          &lt;/item&gt;\n"
 
@@ -520,15 +534,20 @@ ngx_http_dlna_xor_node(ngx_http_request_t *r, u_char *name)
 static void
 ngx_http_dlna_browse(ngx_http_request_t *r)
 {
-    u_char                type, *filename, *last, *leaf;
-    size_t                root, len, allocated;
-    ngx_err_t             err;
-    ngx_str_t             path, root_path, parent_id, object_path, parent_path;
-    ngx_int_t             v, rc;
-    ngx_dir_t             dir;
-    ngx_uint_t            n, from, count, nest, returned, nmatches;
-    ngx_file_info_t       fi;
-    ngx_http_dlna_ctx_t  *ctx;
+    u_char                     type, *filename, *last, *leaf;
+    size_t                     root, len, allocated;
+    uint32_t                   addr;
+    in_port_t                  port;
+    ngx_err_t                  err;
+    ngx_str_t                  path, root_path, parent_id, object_path,
+                               parent_path;
+    struct tm                  tm;
+    ngx_int_t                  v, rc;
+    ngx_dir_t                  dir;
+    ngx_uint_t                 n, from, count, nest, returned, nmatches;
+    ngx_file_info_t            fi;
+    ngx_http_dlna_ctx_t       *ctx;
+    ngx_http_dlna_loc_conf_t  *dlcf;
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_dlna_module);
 
@@ -630,6 +649,11 @@ ngx_http_dlna_browse(ngx_http_request_t *r)
         return;
     }
 
+    dlcf = ngx_http_get_module_loc_conf(r, ngx_http_dlna_module);
+
+    port = dlcf->root->port;
+    addr = dlcf->root->addr;
+
     if (nest) {
 
         returned = 0;
@@ -726,9 +750,23 @@ ngx_http_dlna_browse(ngx_http_request_t *r)
                                            &ctx->object_id, ngx_de_name(&dir),
                                            &ctx->object_id, ngx_de_name(&dir));
             } else {
+                ngx_libc_localtime(ngx_de_mtime(&dir), &tm);
+
                 rc = ngx_http_dlna_sprintf(r, NGX_HTTP_DLNA_BROWSE_ITEM,
                                            &ctx->object_id, ngx_de_name(&dir),
                                            &ctx->object_id, ngx_de_name(&dir),
+                                           tm.tm_year + 1900,
+                                           tm.tm_mon + 1,
+                                           tm.tm_mday,
+                                           tm.tm_hour,
+                                           tm.tm_min,
+                                           tm.tm_sec,
+                                           ngx_de_fs_size(&dir),
+                                           (ngx_uint_t) (0xff & addr),
+                                           (ngx_uint_t) (0xff & (addr >> 8)),
+                                           (ngx_uint_t) (0xff & (addr >> 16)),
+                                           (ngx_uint_t) (addr >> 24),
+                                           (ngx_uint_t) port,
                                            &r->uri,
                                            &object_path, ngx_de_name(&dir));
             }
@@ -779,8 +817,22 @@ ngx_http_dlna_browse(ngx_http_request_t *r)
             rc = ngx_http_dlna_sprintf(r, NGX_HTTP_DLNA_BROWSE_CONTAINER,
                                        &parent_id, leaf, &parent_id, leaf);
         } else {
+            ngx_libc_localtime(ngx_de_mtime(&dir), &tm);
+
             rc = ngx_http_dlna_sprintf(r, NGX_HTTP_DLNA_BROWSE_ITEM,
                                        &parent_id, leaf, &parent_id, leaf,
+                                           tm.tm_year + 1900,
+                                           tm.tm_mon + 1,
+                                           tm.tm_mday,
+                                           tm.tm_hour,
+                                           tm.tm_min,
+                                           tm.tm_sec,
+                                       ngx_de_fs_size(&dir),
+                                       (ngx_uint_t) (0xff & addr),
+                                       (ngx_uint_t) (0xff & (addr >> 8)),
+                                       (ngx_uint_t) (0xff & (addr >> 16)),
+                                       (ngx_uint_t) (addr >> 24),
+                                       (ngx_uint_t) port,
                                        &r->uri, &parent_path, leaf);
         }
     }
@@ -1127,6 +1179,8 @@ ngx_http_dlna(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
+    ngx_memzero(root, sizeof(ngx_http_dlna_root_t));
+
     root->cscf = cscf;
     root->location = clcf->name;
 
@@ -1139,6 +1193,7 @@ ngx_http_dlna(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     value = cf->args->elts;
 
     dlcf->name = value[1];
+    dlcf->root = root;
 
     return NGX_CONF_OK;
 }
@@ -1183,6 +1238,9 @@ ngx_http_dlna_postconfiguration(ngx_conf_t *cf)
                     r->location = root->location;
                     r->port = ntohs(port[n].port);
                     r->addr = addr[i].opt.u.sockaddr_in.sin_addr.s_addr;
+
+                    root->port = r->port;
+                    root->addr = r->addr;
                 }
             }
         }
