@@ -29,7 +29,7 @@ typedef struct {
 
 
 typedef struct {
-    ngx_array_t  roots; /* ngx_str_t */
+    ngx_array_t  roots; /* ngx_ssdp_dlna_root_t */
     ngx_array_t  iface; /* ngx_ssdp_dlna_iface_t */
 } ngx_ssdp_dlna_conf_t;
 
