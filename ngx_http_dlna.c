@@ -150,6 +150,7 @@ ngx_http_dlna_handler(ngx_http_request_t *r)
 {
     ngx_str_t                  name, value;
     ngx_int_t                  rc;
+    ngx_table_elt_t           *h;
     ngx_http_dlna_ctx_t       *ctx;
     ngx_http_dlna_action_e     action;
     ngx_http_variable_value_t  v;
@@ -165,6 +166,17 @@ ngx_http_dlna_handler(ngx_http_request_t *r)
     }
 
     if (r->method != NGX_HTTP_POST) {
+
+        h = ngx_list_push(&r->headers_out.headers);
+        if (h == NULL) {
+            return NGX_ERROR;
+        }
+
+        h->hash = 1;
+
+        ngx_str_set(&h->key, "contentFeatures.dlna.org");
+        ngx_str_set(&h->value, "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000");
+
         return NGX_DECLINED;
     }
 
@@ -480,7 +492,7 @@ ngx_http_dlna_xor_node(ngx_http_request_t *r, u_char *name)
     "            &lt;/dc:date&gt;\n"                                          \
     "            &lt;sec:dcmInfo&gt;\n"                                       \
     "                CREATIONDATE=0,"                                         \
-                    "FOLDER=masha_i_medved_episode13_720p,"                   \
+                    "FOLDER=ABC,"                                             \
                     "BM=0\n"                                                  \
     "            &lt;/sec:dcmInfo&gt;\n"                                      \
     "            &lt;res\n"                                                   \
@@ -488,11 +500,9 @@ ngx_http_dlna_xor_node(ngx_http_request_t *r, u_char *name)
     "                duration=\"0:06:41.832\"\n"                              \
     "                bitrate=\"783441\"\n"                                    \
     "                resolution=\"1280x720\"\n"                               \
-    "                protocolInfo=\"http-get:*:video/x-mkv:DLNA.ORG_OP=01;"   \
-                    "DLNA.ORG_CI=0;"                                          \
-                    "DLNA.ORG_FLAGS=01700000000000000000000000000000\"&gt;\n" \
-    "              http://192.168.1.35:8081%V%V/%s\n"                         \
-    "            &lt;/res&gt;\n"                                              \
+    "                protocolInfo=\"http-get:*:video/x-mkv:*\"&gt;"           \
+                  "http://192.168.1.35:8081%V%V/%s\n"                         \
+                "&lt;/res&gt;\n"                                              \
     "          &lt;/item&gt;\n"
 
 
