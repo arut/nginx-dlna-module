@@ -268,9 +268,9 @@ ngx_ssdp_dlna_read_request(ngx_event_t *rev)
                                                  ngx_ssdp_dlna_module);
 
     do {
-        socklen = sizeof(struct sockaddr_in);
+        socklen = sizeof(struct sockaddr);
 
-        n = recvfrom(c->fd, in, NGX_DLNA_SSDP_UDP_SIZE, 0, &sin, &socklen);
+        n = recvfrom(c->fd, in, NGX_DLNA_SSDP_UDP_SIZE, 0, (struct sockaddr *)&sin, &socklen);
 
         if (n < 0) {
             ngx_handle_read_event(rev, 0);
@@ -422,8 +422,8 @@ ngx_ssdp_dlna_reply(struct sockaddr_in *sin, uint32_t iface, ngx_str_t *st,
                          append_st ? "::" : "",
                          &addon);
 
-        if (sendto(ngx_ssdp_dlna_socket, out, (size_t) (p - out), 0, sin,
-                   sizeof(struct sockaddr_in))
+        if (sendto(ngx_ssdp_dlna_socket, out, (size_t) (p - out), 0, (struct sockaddr *)sin,
+                   sizeof(struct sockaddr))
             == -1)
         {
             ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, ngx_socket_errno,

@@ -534,7 +534,8 @@ ngx_http_dlna_xor_node(ngx_http_request_t *r, u_char *name)
 static void
 ngx_http_dlna_browse(ngx_http_request_t *r)
 {
-    u_char                     type, *filename, *last, *leaf;
+    u_char                     type, *last, *leaf;
+    u_char 					   *filename = NULL;
     size_t                     root, len, allocated;
     uint32_t                   addr;
     in_port_t                  port;
@@ -615,6 +616,7 @@ ngx_http_dlna_browse(ngx_http_request_t *r)
                    "http dlna Browse type:%c, path:\"%V\", "
                    "nest:%ui, from:%ui, count:%ui",
                    type, &path, nest, from, count);
+
 
     object_path = path;
 
